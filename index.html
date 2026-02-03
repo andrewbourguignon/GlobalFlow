@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Global Flow</title>
+  <style>
+    :root {
+      --bg: #1c1c1e;
+      --text: #f2f2f7;
+      --accent: #0a84ff;
+      --card: #2c2c2e;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      padding: 2rem;
+      margin: 0;
+      text-align: center;
+    }
+    h1 {
+      margin-bottom: 1rem;
+      font-weight: 600;
+    }
+    .container {
+      background-color: var(--card);
+      padding: 2rem;
+      border-radius: 20px;
+      max-width: 700px;
+      margin: auto;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+    }
+    input, select, button, textarea {
+      padding: 0.6rem;
+      margin: 0.5rem;
+      font-size: 1rem;
+      border-radius: 12px;
+      border: none;
+      outline: none;
+    }
+    input, select, textarea {
+      width: 80%;
+    }
+    textarea {
+      resize: none;
+      overflow: hidden;
+    }
+    button {
+      background-color: var(--accent);
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      opacity: 0.9;
+    }
+    .output {
+      margin-top: 2rem;
+      font-size: 1.1rem;
+      font-weight: 500;
+    }
+    .edit-input {
+      width: auto;
+      margin: 0 5px;
+    }
+    .draggable {
+      cursor: move;
+    }
+  </style>
+</head>
+<body>
+  <h1>Global Flow</h1>
+  <div class="container" id="app">
+    <h2>Add Moderator</h2>
+<ul id="moderatorList" style="list-style:none; padding:0; margin:0 0 1rem 0;"></ul>
+<input type="text" id="moderatorInput" placeholder="Name" />
+    <button onclick="addModerator()">Add</button>
+
+    <h2>Add Topic</h2>
+<ul id="topicList" style="list-style:none; padding:0; margin:0 0 1rem 0;"></ul>
+<input type="text" id="topicInput" placeholder="Topic" />
+    <input type="number" id="scoreInput" placeholder="Score (1-10)" min="1" max="10" />
+    <button onclick="addTopic()">Add</button>
+
+    <h2>Run Picker</h2>
+<button onclick="pickOnlyModerator()">Pick Moderator Only</button>
+<button onclick="pickOnlyTopic()">Pick Topic Only</button>
+    <button onclick="selectModeratorAndTopic()">Pick Moderator & Topic</button>
+    <button onclick="rerollModerator()">Re-pick Moderator</button>
+    <button onclick="rerollTopic()">Re-pick Topic</button>
+
+    <div class="output" id="selectionOutput"></div>
+
+    <h2>Meeting Notes</h2>
+    <textarea id="meetingNotes" rows="4" placeholder="Add any notes about this session..." oninput="autoGrow(this)"></textarea>
+
+    <h2>Post-Meeting Recap</h2>
+    <button onclick="downloadRecapAsImage()">Download Recap Image</button>
+    <button onclick="clearData()">Clear All Data</button>
+  <h2>Debate Timer</h2>
+<div>
+  <select id="presetTime">
+    <option value="180">3 minutes</option>
+    <option value="300">5 minutes</option>
+    <option value="600">10 minutes</option>
+    <option value="custom">Custom</option>
+  </select>
+  <input type="number" id="customTime" placeholder="Seconds" style="display:none;" min="10" />
+  <button onclick="startTimer()">Start</button>
+  <button onclick="pauseTimer()">Pause</button>
+  <button onclick="resetTimer()">Reset</button>
+  <div id="timerDisplay" style="font-size: 2rem; margin-top: 1rem;">00:00</div>
+</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script>
+    let moderators = [];
+    let topics = [];
+    let sessionPicks = [];
+    let currentPick = null;
+
+    function addModerator() {
+      const input = document.getElementById("moderatorInput");
+      const name = input.value.trim();
+      if (name) {
+        moderators.push(name);
+        const li = document.createElement("li");
+        li.textContent = name;
+        li.style.padding = "4px 0";
+        document.getElementById("moderatorList").appendChild(li);
+        input.value = "";
+        alert(`Added moderator: ${name}`);
+      }
+    }
+
+    function addTopic() {
+      const topicText = document.getElementById("topicInput").value.trim();
+      const score = parseInt(document.getElementById("scoreInput").value);
+      if (topicText && score >= 1 && score <= 10) {
+        topics.push({ topic: topicText, score });
+        const li = document.createElement("li");
+        li.textContent = `${topicText} (Score: ${score})`;
+        li.style.padding = "4px 0";
+        document.getElementById("topicList").appendChild(li);
+        document.getElementById("topicInput").value = "";
+        document.getElementById("scoreInput").value = "";
+        alert(`Added topic: '${topicText}' (Score: ${score})`);
+      }
+    }
+
+    function getControversyRange() {
+      return [1, 4];
+    }
+
+    function pickModerator() {
+      return moderators[Math.floor(Math.random() * moderators.length)];
+    }
+
+    function pickTopic() {
+      const [minScore, maxScore] = getControversyRange();
+      const filteredTopics = topics.filter(t => t.score >= minScore && t.score <= maxScore);
+      return filteredTopics[Math.floor(Math.random() * filteredTopics.length)];
+    }
+
+    function pickOnlyModerator() {
+      if (moderators.length === 0) {
+        alert("Please add at least one moderator.");
+        return;
+      }
+      const moderator = pickModerator();
+      const pick = {
+        moderator,
+        topic: '(Not selected)',
+        score: 0,
+        date: new Date().toLocaleString()
+      };
+      sessionPicks.push(pick);
+      renderSelections();
+    }
+
+    function pickOnlyTopic() {
+      if (topics.length === 0) {
+        alert("Please add at least one topic.");
+        return;
+      }
+      const topic = pickTopic();
+      const pick = {
+        moderator: '(Not selected)',
+        topic: topic.topic,
+        score: topic.score,
+        date: new Date().toLocaleString()
+      };
+      sessionPicks.push(pick);
+      renderSelections();
+    }
+
+    function selectModeratorAndTopic() {
+      if (moderators.length === 0 || topics.length === 0) {
+        alert("Please add at least one moderator and one topic.");
+        return;
+      }
+      const moderator = pickModerator();
+      const topic = pickTopic();
+      currentPick = { moderator, topic };
+      const pick = {
+        moderator,
+        topic: topic.topic,
+        score: topic.score,
+        date: new Date().toLocaleString()
+      };
+      sessionPicks.push(pick);
+      renderSelections();
+    }
+
+    function rerollModerator() {
+      if (!currentPick || moderators.length === 0) return;
+      const newMod = pickModerator();
+      sessionPicks[sessionPicks.length - 1].moderator = newMod;
+      currentPick.moderator = newMod;
+      renderSelections();
+    }
+
+    function rerollTopic() {
+      if (!currentPick || topics.length === 0) return;
+      const newTopic = pickTopic();
+      sessionPicks[sessionPicks.length - 1].topic = newTopic.topic;
+      sessionPicks[sessionPicks.length - 1].score = newTopic.score;
+      currentPick.topic = newTopic;
+      renderSelections();
+    }
+
+    function renderSelections() {
+      const output = document.getElementById("selectionOutput");
+      output.innerHTML = "";
+      sessionPicks.forEach((pick, index) => {
+        const wrapper = document.createElement("div");
+        wrapper.classList.add("draggable");
+        wrapper.setAttribute("draggable", true);
+        wrapper.setAttribute("data-index", index);
+        wrapper.ondragstart = dragStart;
+        wrapper.ondragover = dragOver;
+        wrapper.ondrop = drop;
+        wrapper.innerHTML = `
+  <div style='display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;'>
+    <div style='flex: 1 1 100%; text-align: left;'>
+      <strong>Moderator:</strong> <input class='edit-input' value="${pick.moderator}" onchange="editEntry(${index}, 'moderator', this.value)" />
+      <strong>Topic:</strong> <input class='edit-input' value="${pick.topic}" onchange="editEntry(${index}, 'topic', this.value)" />
+      <strong>Score:</strong> <input type='number' class='edit-input' min='1' max='10' value="${pick.score}" onchange="editEntry(${index}, 'score', this.value)" />
+    </div>
+    <button style='background:#ff3b30; color:#fff; padding:0.3rem 0.6rem; border-radius:10px; font-size:0.9rem; margin-top: 0.5rem;' onclick='deleteEntry(${index})'>Delete</button>
+  </div>`;
+        output.appendChild(wrapper);
+      });
+    }
+
+    function dragStart(e) {
+      e.dataTransfer.setData("text/plain", e.target.dataset.index);
+    }
+
+    function dragOver(e) {
+      e.preventDefault();
+    }
+
+    function drop(e) {
+      e.preventDefault();
+      const fromIndex = e.dataTransfer.getData("text/plain");
+      const toIndex = e.target.closest(".draggable").dataset.index;
+      const item = sessionPicks.splice(fromIndex, 1)[0];
+      sessionPicks.splice(toIndex, 0, item);
+      renderSelections();
+    }
+
+    function editEntry(index, field, value) {
+  if (field === 'score') value = parseInt(value);
+  sessionPicks[index][field] = value;
+}
+
+function deleteEntry(index) {
+  sessionPicks.splice(index, 1);
+  renderSelections();
+}
+
+    function clearData() {
+      moderators = [];
+      topics = [];
+      sessionPicks = [];
+      currentPick = null;
+      document.getElementById("selectionOutput").innerHTML = "";
+      document.getElementById("meetingNotes").value = "";
+      document.getElementById("moderatorList").innerHTML = "";
+      document.getElementById("topicList").innerHTML = "";
+      alert("All data cleared. Ready for a new session.");
+    }
+
+    function downloadRecapAsImage() {
+      if (sessionPicks.length === 0) {
+        alert("Please run the picker first.");
+        return;
+      }
+      const notes = document.getElementById("meetingNotes").value.trim();
+      const recapCard = document.createElement("div");
+      recapCard.style.padding = "2rem";
+      recapCard.style.width = "500px";
+      recapCard.style.margin = "auto";
+      recapCard.style.backgroundColor = "#1c1c1e";
+      recapCard.style.color = "#f2f2f7";
+      recapCard.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+      recapCard.style.borderRadius = "20px";
+      recapCard.innerHTML = `<h2 style='margin-bottom: 0.5rem;'>Debate Recap</h2><p>Date: ${new Date().toLocaleString()}</p>`;
+      sessionPicks.forEach(pick => {
+        recapCard.innerHTML += `<p>Moderator: ${pick.moderator} | Topic: ${pick.topic} (Score: ${pick.score})</p>`;
+      });
+      const avgScore = (sessionPicks.reduce((acc, cur) => acc + cur.score, 0) / sessionPicks.length).toFixed(1);
+      const uniqueModerators = new Set(sessionPicks.map(p => p.moderator)).size;
+      recapCard.innerHTML += `
+        <p><strong>Analytics Summary:</strong></p>
+        <p>Total Picks: ${sessionPicks.length}</p>
+        <p>Unique Moderators: ${uniqueModerators}</p>
+        <p>Average Controversy Score: ${avgScore}</p>
+      `;
+      recapCard.innerHTML += `<p style='margin-top: 1rem;'><strong>Notes:</strong></p><p>${notes || "(No notes added)"}</p>`;
+      document.body.appendChild(recapCard);
+      html2canvas(recapCard).then(canvas => {
+        const link = document.createElement('a');
+        link.download = `debate_recap_${Date.now()}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+        document.body.removeChild(recapCard);
+      });
+    }
+
+    function autoGrow(textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = textarea.scrollHeight + "px";
+    }
+
+let timerInterval;
+let remainingTime = 0;
+
+const preset = document.getElementById('presetTime');
+const customInput = document.getElementById('customTime');
+const display = document.getElementById('timerDisplay');
+
+preset.addEventListener('change', () => {
+  if (preset.value === 'custom') {
+    customInput.style.display = 'inline-block';
+  } else {
+    customInput.style.display = 'none';
+  }
+});
+
+function startTimer() {
+  clearInterval(timerInterval);
+  remainingTime = preset.value === 'custom' ? parseInt(customInput.value) : parseInt(preset.value);
+  if (isNaN(remainingTime) || remainingTime <= 0) {
+    alert('Enter a valid time');
+    return;
+  }
+  updateDisplay();
+  timerInterval = setInterval(() => {
+    remainingTime--;
+    updateDisplay();
+    if (remainingTime <= 0) {
+      clearInterval(timerInterval);
+      display.textContent = "Time's up!";
+    }
+  }, 1000);
+}
+
+function pauseTimer() {
+  clearInterval(timerInterval);
+}
+
+function resetTimer() {
+  clearInterval(timerInterval);
+  remainingTime = 0;
+  display.textContent = '00:00';
+}
+
+function updateDisplay() {
+  const mins = Math.floor(remainingTime / 60);
+  const secs = remainingTime % 60;
+  display.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+</script>
+</body>
+</html>
